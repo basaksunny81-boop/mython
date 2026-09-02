@@ -34,7 +34,7 @@
 
         <div id="dashboard" class="hidden text-center space-y-4">
             <div class="bg-indigo-50 text-indigo-700 p-4 rounded-xl text-sm font-medium">
-                Welcome back! You are logged in successfully.
+                Welcome back! You are logged in securely. (Single-device active)
             </div>
             <button onclick="handleLogout()" class="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium py-2 px-4 rounded-lg text-sm transition-colors">Log Out</button>
         </div>
@@ -54,9 +54,43 @@
             if (session) {
                 document.getElementById('auth-form').classList.add('hidden');
                 document.getElementById('dashboard').classList.remove('hidden');
+                initSessionGuard(session.user.id);
             }
         }
         checkUser();
+
+        async function initSessionGuard(userId) {
+            const localSessionToken = localStorage.getItem('current_session_token');
+
+            // Verify against database profile
+            const { data, error } = await _supabase
+                .from('profiles')
+                .select('session_token')
+                .eq('id', userId)
+                .single();
+
+            if (data && data.session_token !== localSessionToken) {
+                alert('You have been logged out because this account was accessed from another device.');
+                await _supabase.auth.signOut();
+                localStorage.removeItem('current_session_token');
+                location.reload();
+                return;
+            }
+
+            // Listen for live overrides from other devices
+            _supabase
+                .channel('public:profiles')
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, payload => {
+                    if (payload.new.session_token !== localStorage.getItem('current_session_token')) {
+                        alert('Logged out: Your account was signed into another device.');
+                        _supabase.auth.signOut().then(() => {
+                            localStorage.removeItem('current_session_token');
+                            location.reload();
+                        });
+                    }
+                })
+                .subscribe();
+        }
 
         async function handleSignUp() {
             const email = document.getElementById('email').value;
@@ -83,12 +117,28 @@
                 msg.className = "text-center text-xs mt-4 font-medium text-rose-600";
                 msg.innerText = error.message;
             } else {
+                // Generate unique device session token
+                const newSessionToken = crypto.randomUUID();
+                localStorage.setItem('current_session_token', newSessionToken);
+
+                // Upsert session token into profiles table
+                await _supabase.from('profiles').upsert({
+                    id: data.user.id,
+                    session_token: newSessionToken,
+                    updated_at: new Date()
+                });
+
                 location.reload();
             }
         }
 
         async function handleLogout() {
+            const { data: { session } } = await _supabase.auth.getSession();
+            if (session) {
+                await _supabase.from('profiles').update({ session_token: null }).eq('id', session.user.id);
+            }
             await _supabase.auth.signOut();
+            localStorage.removeItem('current_session_token');
             location.reload();
         }
     </script>
