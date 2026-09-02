@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Portal</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Online Examination Portal</h1>
+    <div id="auth-container">
+        <h2>Student Login / Signup</h2>
+        <input type="email" id="email" placeholder="Enter email">
+        <input type="password" id="password" placeholder="Enter password">
+        <button onclick="signUp()">Sign Up</button>
+        <button onclick="signIn()">Log In</button>
+    </div>
+    <div id="dashboard" style="display:none;">
+        <h2 id="welcome-msg"></h2>
+        <button onclick="signOut()">Log Out</button>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://etrmoqrmfcfsknqhljqo.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_xOoV1cKpatBdsrydC0P8NQ_Q7xp9xfL';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function signUp() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const { data, error } = await supabase.auth.signUp({ email, password });
+            if (error) alert(error.message);
+            else alert('Signup successful! Check your email if verification is required, or try logging in.');
+        }
+
+        async function signIn() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) alert(error.message);
+            else checkUser();
+        }
+
+        async function checkUser() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                document.getElementById('auth-container').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                document.getElementById('welcome-msg').innerText = 'Welcome, ' + user.email;
+            }
+        }
+
+        async function signOut() {
+            await supabase.auth.signOut();
+            location.reload();
+        }
+
+        checkUser();
+    </script>
+</body>
+</html>
